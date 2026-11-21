@@ -33,10 +33,14 @@
       overflow-x: hidden;
     }
 
-    /* 視覺隱藏的檔案選擇器（不用 display:none，避免 iOS Safari 擋掉點選） */
+    /* 視覺隱藏的檔案選擇器（相容 iOS Safari） */
     .sr-file-input {
       position: fixed; left: -9999px; top: -9999px;
-      width: 1px; height: 1px; opacity: 0; pointer-events: none;
+      width: 1px; height: 1px; opacity: 0;
+    }
+    .popover-backdrop {
+      position: fixed; inset: 0; z-index: 3999;
+      background: transparent; display: none;
     }
 
     /* ===== LINE 原生極簡頂部列 ===== */
@@ -711,6 +715,7 @@
 </div>
 
 <!-- LINE 白色懸浮選單 -->
+<div id="popoverBackdrop" class="popover-backdrop" onclick="hidePopover()"></div>
 <div id="popoverMenu" class="popover-menu"></div>
 
 <!-- ===== 刪除確認彈窗 ===== -->
@@ -1007,7 +1012,6 @@
     }
     updateOwnerUI();
     setupSwipeAndKeys();
-    document.addEventListener("click", () => hidePopover());
     loadSummary();
   }
 
@@ -1034,7 +1038,6 @@
       if (res && res.ok && !res.skipped) {
         albumItemsCache = {};
         applySummary(res);
-        // 若使用者已點進某本相簿，靜默同步更新該相簿參照，不強制跳回首頁
         if (currentAlbum) {
           const updated = allAlbums.find(a =>
             (currentAlbum.folderId && a.folderId === currentAlbum.folderId) ||
@@ -1246,10 +1249,12 @@
     }
   }
 
-  // ===== LINE 白色懸浮選單 =====
+  // ===== LINE 白色懸浮選單（修正手機點擊無反應）=====
   function showPopover(anchorEl, html) {
+    const backdrop = document.getElementById("popoverBackdrop");
     const menu = document.getElementById("popoverMenu");
     menu.innerHTML = html;
+    backdrop.style.display = "block";
     menu.style.display = "block";
 
     const rect = anchorEl.getBoundingClientRect();
@@ -1267,59 +1272,114 @@
   }
 
   function hidePopover() {
+    document.getElementById("popoverBackdrop").style.display = "none";
     document.getElementById("popoverMenu").style.display = "none";
+  }
+
+  function prepareQuickPicker(mode, targetAlbum) {
+    if (isUploading) {
+      showToast("目前有檔案正在上傳中，請稍候完成");
+      return false;
+    }
+    pickerMode = mode;
+    directTargetAlbum = targetAlbum || null;
+    hidePopover();
+    return true;
   }
 
   function openHeaderMenu(event) {
     event.stopPropagation();
     const shareItem = (!LOCKED_GROUP && activeGroup !== "全部")
-      ? `<button class="popover-item" onclick="event.stopPropagation();hidePopover();copyGroupShareLink()">複製「${escapeHtml(activeGroup)}」專屬連結</button>`
+      ? `<button type="button" class="popover-item" data-act="share">複製「${escapeHtml(activeGroup)}」專屬連結</button>`
       : "";
     const adminItem = isDeviceAdmin()
-      ? `<button class="popover-item danger" onclick="event.stopPropagation();hidePopover();logoutAdmin()">登出此裝置管理員</button>`
-      : `<button class="popover-item" onclick="event.stopPropagation();hidePopover();openAdminModal()">開啟管理員免密刪除</button>`;
+      ? `<button type="button" class="popover-item danger" data-act="logoutAdmin">登出此裝置管理員</button>`
+      : `<button type="button" class="popover-item" data-act="openAdmin">開啟管理員免密刪除</button>`;
 
     showPopover(event.currentTarget, `
-      <button class="popover-item" onclick="event.stopPropagation();setSortMode('newest')">
+      <button type="button" class="popover-item" data-act="sortNewest">
         <span>最新新增（預設）</span>${sortMode === 'newest' ? '<span class="check">✓</span>' : ''}
       </button>
-      <button class="popover-item" onclick="event.stopPropagation();setSortMode('name_desc')">
+      <button type="button" class="popover-item" data-act="sortDesc">
         <span>名稱由新到舊</span>${sortMode === 'name_desc' ? '<span class="check">✓</span>' : ''}
       </button>
-      <button class="popover-item" onclick="event.stopPropagation();setSortMode('name_asc')">
+      <button type="button" class="popover-item" data-act="sortAsc">
         <span>名稱由舊到新</span>${sortMode === 'name_asc' ? '<span class="check">✓</span>' : ''}
       </button>
       <div class="popover-divider"></div>
-      <button class="popover-item" onclick="event.stopPropagation();hidePopover();syncNow()">立即同步雲端相簿</button>
+      <button type="button" class="popover-item" data-act="sync">立即同步雲端相簿</button>
       ${shareItem}
       <div class="popover-divider"></div>
       ${adminItem}
     `);
+
+    const menu = document.getElementById("popoverMenu");
+    menu.onclick = (e) => {
+      const btn = e.target.closest("[data-act]");
+      if (!btn) return;
+      const act = btn.dataset.act;
+      hidePopover();
+      if (act === "sortNewest") setSortMode("newest");
+      else if (act === "sortDesc") setSortMode("name_desc");
+      else if (act === "sortAsc") setSortMode("name_asc");
+      else if (act === "sync") syncNow();
+      else if (act === "share") copyGroupShareLink();
+      else if (act === "openAdmin") openAdminModal();
+      else if (act === "logoutAdmin") logoutAdmin();
+    };
   }
 
   function setSortMode(mode) {
     sortMode = mode;
-    hidePopover();
     renderAlbums(false);
   }
 
   function openCardMenu(event, origIdx) {
     event.stopPropagation();
     showPopover(event.currentTarget, `
-      <button class="popover-item" onclick="event.stopPropagation();openQuickPicker('direct_upload', allAlbums[${origIdx}]);hidePopover()">上傳項目</button>
+      <label for="quickFilePicker" class="popover-item" data-act="uploadCard">上傳項目</label>
       <div class="popover-divider"></div>
-      <button class="popover-item danger" onclick="event.stopPropagation();hidePopover();openDeleteForAlbum(${origIdx})">刪除相簿</button>
+      <button type="button" class="popover-item danger" data-act="deleteCard">刪除相簿</button>
     `);
+
+    const menu = document.getElementById("popoverMenu");
+    menu.onclick = (e) => {
+      const btn = e.target.closest("[data-act]");
+      if (!btn) return;
+      if (btn.dataset.act === "uploadCard") {
+        if (!prepareQuickPicker("direct_upload", allAlbums[origIdx])) e.preventDefault();
+      } else if (btn.dataset.act === "deleteCard") {
+        hidePopover();
+        openDeleteForAlbum(origIdx);
+      }
+    };
   }
 
   function openDetailMenu(event) {
     event.stopPropagation();
     showPopover(event.currentTarget, `
-      <button class="popover-item" onclick="event.stopPropagation();openQuickPicker('direct_upload', currentAlbum);hidePopover()">上傳項目</button>
-      <button class="popover-item" onclick="event.stopPropagation();hidePopover();enterSelectMode()">選擇刪除項目</button>
+      <label for="quickFilePicker" class="popover-item" data-act="uploadDetail">上傳項目</label>
+      <button type="button" class="popover-item" data-act="selectDelete">選擇刪除項目</button>
       <div class="popover-divider"></div>
-      <button class="popover-item danger" onclick="event.stopPropagation();hidePopover();openDeleteModal('album')">刪除相簿</button>
+      <button type="button" class="popover-item danger" data-act="deleteAlbum">刪除相簿</button>
     `);
+
+    const menu = document.getElementById("popoverMenu");
+    menu.onclick = (e) => {
+      const btn = e.target.closest("[data-act]");
+      if (!btn) return;
+      const act = btn.dataset.act;
+      if (act === "uploadDetail") {
+        if (!prepareQuickPicker("direct_upload", currentAlbum)) e.preventDefault();
+      } else if (act === "selectDelete") {
+        hidePopover();
+        enterSelectMode();
+        showToast("請點選要刪除的照片或影片");
+      } else if (act === "deleteAlbum") {
+        hidePopover();
+        openDeleteModal("album");
+      }
+    };
   }
 
   function copyGroupShareLink() {
@@ -1365,12 +1425,12 @@
 
   function onQuickFilesPicked(event) {
     const rawFiles = Array.from(event.target.files || []);
+    event.target.value = "";
     if (rawFiles.length === 0) return;
 
     const valid = [];
     const skipped = [];
     rawFiles.forEach(file => {
-      // 照片會自動壓縮，僅針對影片檢查 25MB 上限
       if (isVideoFile(file) && file.size > MAX_VIDEO_BYTES) skipped.push(file.name);
       else valid.push(file);
     });
@@ -1558,7 +1618,6 @@
       const extMatch = file.name.match(/\.[^.]+$/);
       const origExt = extMatch ? extMatch[0] : (isVideoFile(file) ? ".mp4" : ".jpg");
 
-      // 影片或 GIF 動畫不經 canvas 壓縮
       if (isVideoFile(file) || file.type === "image/gif") {
         try {
           const base64 = await readFileAsBase64(file);
