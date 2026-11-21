@@ -33,6 +33,12 @@
       overflow-x: hidden;
     }
 
+    /* 視覺隱藏的檔案選擇器（不用 display:none，避免 iOS Safari 擋掉點選） */
+    .sr-file-input {
+      position: fixed; left: -9999px; top: -9999px;
+      width: 1px; height: 1px; opacity: 0; pointer-events: none;
+    }
+
     /* ===== LINE 原生極簡頂部列 ===== */
     .header {
       position: sticky; top: 0; z-index: 150;
@@ -112,7 +118,7 @@
     /* LINE 白色懸浮選單 */
     .popover-menu {
       position: fixed; z-index: 4000;
-      min-width: 188px; background: #FFFFFF;
+      min-width: 196px; background: #FFFFFF;
       border-radius: 8px; padding: 6px 0;
       box-shadow: 0 4px 20px rgba(0,0,0,0.16); border: 1px solid #EAEAEA;
       display: none;
@@ -239,7 +245,37 @@
     .photo-cell {
       aspect-ratio: 1 / 1; background: #F2F3F5; overflow: hidden; cursor: pointer; position: relative;
     }
-    .photo-cell img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .photo-cell img { width: 100%; height: 100%; object-fit: cover; display: block; transition: opacity 0.15s; }
+    .photo-cell.selected img { opacity: 0.72; }
+    .select-check {
+      position: absolute; top: 7px; right: 7px; z-index: 6;
+      width: 24px; height: 24px; border-radius: 50%;
+      border: 2px solid #FFFFFF; background: rgba(0, 0, 0, 0.35);
+      color: #FFFFFF; font-size: 13px; font-weight: 700;
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+    }
+    .photo-cell.selected .select-check {
+      background: var(--line-green); border-color: var(--line-green);
+    }
+
+    /* 多選刪除底部操作列 */
+    #selectBar {
+      position: fixed; left: 0; right: 0; bottom: 0; z-index: 350;
+      background: #FFFFFF; border-top: 1px solid #E5E7EB;
+      box-shadow: 0 -4px 16px rgba(0,0,0,0.08);
+      padding: 10px 16px calc(12px + env(safe-area-inset-bottom));
+      display: none; align-items: center; justify-content: space-between; gap: 12px;
+    }
+    .select-bar-left { font-size: 14px; font-weight: 700; color: #111; }
+    .select-bar-actions { display: flex; align-items: center; gap: 8px; }
+    .sb-btn {
+      border: none; border-radius: 99px; padding: 8px 16px;
+      font-size: 14px; font-weight: 600; cursor: pointer;
+    }
+    .sb-cancel { background: var(--surface); color: #333; }
+    .sb-delete { background: var(--danger); color: #fff; }
+    .sb-delete:disabled { background: #F1B0B0; cursor: not-allowed; }
 
     /* LINE 綠色圓形「＋」懸浮按鈕 */
     .fab {
@@ -333,7 +369,7 @@
     /* ===== 上傳中輕量浮動進度卡片 ===== */
     #uploadBanner {
       position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
-      width: calc(100% - 32px); max-width: 420px; z-index: 9400;
+      width: calc(100% - 32px); max-width: 420px; z-index: 9600;
       background: #1A1A1A; color: #FFFFFF;
       border-radius: 14px; padding: 14px 16px;
       box-shadow: 0 8px 28px rgba(0,0,0,0.28);
@@ -480,7 +516,7 @@
       position: fixed; bottom: 92px; left: 50%; transform: translateX(-50%);
       background: rgba(17,17,17,0.9); color: #fff;
       padding: 10px 18px; border-radius: 24px; font-size: 13px;
-      z-index: 9500; display: none; white-space: nowrap; max-width: 90vw;
+      z-index: 9700; display: none; white-space: nowrap; max-width: 90vw;
       overflow: hidden; text-overflow: ellipsis;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
@@ -488,8 +524,8 @@
 </head>
 <body>
 
-<!-- 全域原生照片／影片選擇器（點「＋」直接呼叫） -->
-<input id="quickFilePicker" type="file" accept="image/*,video/*" multiple style="display:none;" onchange="onQuickFilesPicked(event)">
+<!-- 全域原生照片／影片選擇器 -->
+<input id="quickFilePicker" class="sr-file-input" type="file" accept="image/*,video/*" multiple onchange="onQuickFilesPicked(event)">
 
 <!-- ===== 首頁：所有相簿 ===== -->
 <div id="homeView">
@@ -575,7 +611,7 @@
     <div>正在讀取相簿清單...</div>
   </div>
 
-  <!-- 首頁點「＋」：直接開啟手機照片選擇器 → 進入建立相簿畫面 -->
+  <!-- 首頁點「＋」：選擇照片建立新相簿 -->
   <button class="fab" title="選擇照片建立相簿" aria-label="建立新相簿" onclick="openQuickPicker('new_album')">
     <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round">
       <line x1="12" y1="5" x2="12" y2="19"/>
@@ -615,8 +651,17 @@
   </div>
   <div id="photoGrid" class="photo-grid"></div>
 
-  <!-- 相簿內點「＋」：直接開啟手機照片選擇器 → 選完立即上傳 -->
-  <button class="fab" title="選擇照片或影片上傳" aria-label="上傳項目" onclick="openQuickPicker('direct_upload', currentAlbum)">
+  <!-- 多選刪除底部操作列 -->
+  <div id="selectBar">
+    <span id="selectBarCount" class="select-bar-left">已選取 0 個項目</span>
+    <div class="select-bar-actions">
+      <button class="sb-btn sb-cancel" onclick="exitSelectMode()">取消</button>
+      <button id="selectDeleteBtn" class="sb-btn sb-delete" onclick="openBatchDeleteModal()" disabled>刪除項目</button>
+    </div>
+  </div>
+
+  <!-- 相簿內點「＋」：直接選擇照片或影片上傳 -->
+  <button id="detailFab" class="fab" title="選擇照片或影片上傳" aria-label="上傳項目" onclick="openQuickPicker('direct_upload', currentAlbum)">
     <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round">
       <line x1="12" y1="5" x2="12" y2="19"/>
       <line x1="5" y1="12" x2="19" y2="12"/>
@@ -649,7 +694,7 @@
 
     <div class="composer-meta">
       <span id="composerCountText">已選擇 0 個項目</span>
-      <span>單檔上限 25 MB</span>
+      <span>照片自動壓縮加速 · 影片上限 25 MB</span>
     </div>
 
     <div id="composerPreviewGrid" class="preview-grid"></div>
@@ -774,36 +819,46 @@
 <div id="toast" class="toast"></div>
 
 <script>
-  // ===== ★ 請換成你的 GAS 網頁應用程式網址（結尾為 /exec）=====
+  // ===== ★ 你的 GAS 網頁應用程式網址（結尾為 /exec）=====
   const GAS_API_URL = "https://script.google.com/macros/s/AKfycbxQtoNHR6rFc0sRDe7GwToWLiyLFH1J8O1Fn_ew5jX2Cs5iObfSmHk8XsGgqAYE273Y/exec";
 
   const urlParams     = new URLSearchParams(window.location.search);
   const LOCKED_GROUP  = (urlParams.get("group") || "").trim();
   const BASE_PAGE_URL = window.location.origin + window.location.pathname;
 
-  const MAX_FILE_MB = 25;
-  const MAX_FILE_BYTES = MAX_FILE_MB * 1024 * 1024;
+  // 壓縮與上傳參數（比照 LINE 規格）
+  const IMAGE_MAX_EDGE = 1600;
+  const IMAGE_QUALITY  = 0.82;
+  const UPLOAD_CONCURRENCY = 2;
+  const MAX_VIDEO_MB = 25;
+  const MAX_VIDEO_BYTES = MAX_VIDEO_MB * 1024 * 1024;
+
   const DEL_PASS_LOCAL_KEY = "family_album_del_pass_cf_v1";
   const PAGE_SIZE = 40;
 
   let allAlbums = [];
   let allGroups = [];
   let activeGroup = LOCKED_GROUP || "全部";
-  let sortDesc = true;
+  let sortMode = "newest";        // "newest"（預設最新新增）| "name_desc" | "name_asc"
   let visibleLimit = PAGE_SIZE;
+  let hasAutoSynced = false;
 
   let albumItemsCache = {};
   let currentAlbum = null;
   let currentItems = [];
   let currentIndex = 0;
 
+  // 多選刪除狀態
+  let selectMode = false;
+  let selectedIds = new Set();
+
   // 直覺選圖與上傳狀態
   let pickerMode = "new_album";   // "new_album" | "append_new_album" | "direct_upload"
   let directTargetAlbum = null;
-  let composerFiles = [];         // [{ file, previewUrl, isVideo }]
+  let composerFiles = [];
   let isUploading = false;
 
-  let pendingDeleteType = "";
+  let pendingDeleteType = "";     // "item" | "items" | "album"
   let pendingDeleteAlbum = null;
   let isDeleting = false;
 
@@ -843,9 +898,6 @@
   }
 
   async function apiGet(params) {
-    if (!GAS_API_URL || GAS_API_URL.includes("請換成你的部署ID")) {
-      throw new Error("尚未在 index.html 填入正確的 GAS_API_URL！");
-    }
     const qs = new URLSearchParams(params).toString();
     const res = await fetch(`${GAS_API_URL}?${qs}`, { method: "GET", redirect: "follow" });
     if (!res.ok) throw new Error(`HTTP 錯誤 (${res.status})`);
@@ -853,9 +905,6 @@
   }
 
   async function apiPost(payload) {
-    if (!GAS_API_URL || GAS_API_URL.includes("請換成你的部署ID")) {
-      throw new Error("尚未在 index.html 填入正確的 GAS_API_URL！");
-    }
     const res = await fetch(GAS_API_URL, {
       method: "POST",
       redirect: "follow",
@@ -885,7 +934,6 @@
     c.height = 180;
     const ctx = c.getContext("2d");
 
-    // 1. 滿版綠底（iOS 會自動裁成圓角）
     ctx.fillStyle = "#06C755";
     ctx.fillRect(0, 0, 180, 180);
 
@@ -903,17 +951,14 @@
       ctx.closePath();
     }
 
-    // 2. 後方疊層相簿邊條
     ctx.fillStyle = "rgba(255,255,255,0.45)";
     drawRoundRect(50, 34, 96, 86, 14);
     ctx.fill();
 
-    // 3. 前方白色主相簿卡片
     ctx.fillStyle = "#FFFFFF";
     drawRoundRect(34, 48, 102, 92, 16);
     ctx.fill();
 
-    // 4. 卡片內綠色山景與太陽剪影
     ctx.fillStyle = "#06C755";
     ctx.beginPath();
     ctx.moveTo(48, 124);
@@ -929,8 +974,6 @@
     ctx.fill();
 
     const pngUrl = c.toDataURL("image/png");
-
-    // 套用至 iOS 主畫面圖示與瀏覽器分頁圖示
     const touchLink = document.getElementById("appleTouchIcon");
     if (touchLink) touchLink.href = pngUrl;
 
@@ -940,7 +983,6 @@
     fav.href = pngUrl;
     document.head.appendChild(fav);
 
-    // 動態產生 Android Chrome Manifest（鎖定保留當下 ?group= 網址）
     const manifestObj = {
       name: appName,
       short_name: appName,
@@ -973,8 +1015,42 @@
     try {
       const res = await apiGet({ action: "summary", group: LOCKED_GROUP });
       applySummary(res);
+
+      // 開網頁後自動在背景靜默檢查雲端是否有新照片／新相簿
+      if (!hasAutoSynced) {
+        hasAutoSynced = true;
+        backgroundAutoSync();
+      }
     } catch (err) {
       showErrorState(err.message || "無法連線至雲端相簿 API");
+    }
+  }
+
+  async function backgroundAutoSync() {
+    const btn = document.getElementById("syncBtn");
+    btn.classList.add("spinning");
+    try {
+      const res = await apiPost({ action: "sync", lockedGroup: LOCKED_GROUP, auto: true });
+      if (res && res.ok && !res.skipped) {
+        albumItemsCache = {};
+        applySummary(res);
+        // 若使用者已點進某本相簿，靜默同步更新該相簿參照，不強制跳回首頁
+        if (currentAlbum) {
+          const updated = allAlbums.find(a =>
+            (currentAlbum.folderId && a.folderId === currentAlbum.folderId) ||
+            (a.group === currentAlbum.group && a.name === currentAlbum.name)
+          );
+          if (updated) {
+            currentAlbum = updated;
+            document.getElementById("detailCount").textContent = formatCountText(updated);
+            document.getElementById("detailDate").textContent = updated.updated || "";
+          }
+        }
+      }
+    } catch (e) {
+      // 背景靜默同步失敗不打擾使用者
+    } finally {
+      btn.classList.remove("spinning");
     }
   }
 
@@ -1084,8 +1160,13 @@
     });
 
     list.sort((a, b) => {
+      if (sortMode === "newest") {
+        const diff = (b.updatedMs || 0) - (a.updatedMs || 0);
+        if (diff !== 0) return diff;
+        return b.name.localeCompare(a.name, "zh-Hant", { numeric: true });
+      }
       const cmp = a.name.localeCompare(b.name, "zh-Hant", { numeric: true });
-      return sortDesc ? -cmp : cmp;
+      return sortMode === "name_desc" ? -cmp : cmp;
     });
 
     document.getElementById("countInfo").textContent = `共 ${list.length} 本相簿`;
@@ -1172,7 +1253,7 @@
     menu.style.display = "block";
 
     const rect = anchorEl.getBoundingClientRect();
-    const mw = menu.offsetWidth || 188;
+    const mw = menu.offsetWidth || 196;
     const mh = menu.offsetHeight || 120;
 
     let left = rect.right - mw;
@@ -1192,29 +1273,32 @@
   function openHeaderMenu(event) {
     event.stopPropagation();
     const shareItem = (!LOCKED_GROUP && activeGroup !== "全部")
-      ? `<button class="popover-item" onclick="hidePopover();copyGroupShareLink()">複製「${escapeHtml(activeGroup)}」專屬連結</button>`
+      ? `<button class="popover-item" onclick="event.stopPropagation();hidePopover();copyGroupShareLink()">複製「${escapeHtml(activeGroup)}」專屬連結</button>`
       : "";
     const adminItem = isDeviceAdmin()
-      ? `<button class="popover-item danger" onclick="hidePopover();logoutAdmin()">登出此裝置管理員</button>`
-      : `<button class="popover-item" onclick="hidePopover();openAdminModal()">開啟管理員免密刪除</button>`;
+      ? `<button class="popover-item danger" onclick="event.stopPropagation();hidePopover();logoutAdmin()">登出此裝置管理員</button>`
+      : `<button class="popover-item" onclick="event.stopPropagation();hidePopover();openAdminModal()">開啟管理員免密刪除</button>`;
 
     showPopover(event.currentTarget, `
-      <button class="popover-item" onclick="setSort(true)">
-        <span>名稱由新到舊</span>${sortDesc ? '<span class="check">✓</span>' : ''}
+      <button class="popover-item" onclick="event.stopPropagation();setSortMode('newest')">
+        <span>最新新增（預設）</span>${sortMode === 'newest' ? '<span class="check">✓</span>' : ''}
       </button>
-      <button class="popover-item" onclick="setSort(false)">
-        <span>名稱由舊到新</span>${!sortDesc ? '<span class="check">✓</span>' : ''}
+      <button class="popover-item" onclick="event.stopPropagation();setSortMode('name_desc')">
+        <span>名稱由新到舊</span>${sortMode === 'name_desc' ? '<span class="check">✓</span>' : ''}
+      </button>
+      <button class="popover-item" onclick="event.stopPropagation();setSortMode('name_asc')">
+        <span>名稱由舊到新</span>${sortMode === 'name_asc' ? '<span class="check">✓</span>' : ''}
       </button>
       <div class="popover-divider"></div>
-      <button class="popover-item" onclick="hidePopover();syncNow()">同步最新雲端相簿</button>
+      <button class="popover-item" onclick="event.stopPropagation();hidePopover();syncNow()">立即同步雲端相簿</button>
       ${shareItem}
       <div class="popover-divider"></div>
       ${adminItem}
     `);
   }
 
-  function setSort(desc) {
-    sortDesc = desc;
+  function setSortMode(mode) {
+    sortMode = mode;
     hidePopover();
     renderAlbums(false);
   }
@@ -1222,18 +1306,19 @@
   function openCardMenu(event, origIdx) {
     event.stopPropagation();
     showPopover(event.currentTarget, `
-      <button class="popover-item" onclick="hidePopover();openQuickPicker('direct_upload', allAlbums[${origIdx}])">上傳項目</button>
+      <button class="popover-item" onclick="event.stopPropagation();openQuickPicker('direct_upload', allAlbums[${origIdx}]);hidePopover()">上傳項目</button>
       <div class="popover-divider"></div>
-      <button class="popover-item danger" onclick="hidePopover();openDeleteForAlbum(${origIdx})">刪除相簿</button>
+      <button class="popover-item danger" onclick="event.stopPropagation();hidePopover();openDeleteForAlbum(${origIdx})">刪除相簿</button>
     `);
   }
 
   function openDetailMenu(event) {
     event.stopPropagation();
     showPopover(event.currentTarget, `
-      <button class="popover-item" onclick="hidePopover();openQuickPicker('direct_upload', currentAlbum)">上傳項目</button>
+      <button class="popover-item" onclick="event.stopPropagation();openQuickPicker('direct_upload', currentAlbum);hidePopover()">上傳項目</button>
+      <button class="popover-item" onclick="event.stopPropagation();hidePopover();enterSelectMode()">選擇刪除項目</button>
       <div class="popover-divider"></div>
-      <button class="popover-item danger" onclick="hidePopover();openDeleteModal('album')">刪除相簿</button>
+      <button class="popover-item danger" onclick="event.stopPropagation();hidePopover();openDeleteModal('album')">刪除相簿</button>
     `);
   }
 
@@ -1265,7 +1350,7 @@
     document.body.removeChild(ta);
   }
 
-  // ===== 點「＋」直覺開啟手機照片選擇器 =====
+  // ===== 點「＋」／「上傳項目」開啟照片選擇器 =====
   function openQuickPicker(mode, targetAlbum) {
     if (isUploading) {
       showToast("目前有檔案正在上傳中，請稍候完成");
@@ -1285,19 +1370,19 @@
     const valid = [];
     const skipped = [];
     rawFiles.forEach(file => {
-      if (file.size > MAX_FILE_BYTES) skipped.push(file.name);
+      // 照片會自動壓縮，僅針對影片檢查 25MB 上限
+      if (isVideoFile(file) && file.size > MAX_VIDEO_BYTES) skipped.push(file.name);
       else valid.push(file);
     });
 
     if (valid.length === 0) {
-      showToast(`所選檔案皆超過單檔 ${MAX_FILE_MB} MB 上限，無法上傳`);
+      showToast(`所選影片皆超過單檔 ${MAX_VIDEO_MB} MB 上限，無法上傳`);
       return;
     }
 
-    // 情境 A：在相簿內（或卡片「上傳項目」）選完照片 → 立刻直接上傳
     if (pickerMode === "direct_upload" && directTargetAlbum) {
       if (skipped.length > 0) {
-        showToast(`已略過 ${skipped.length} 個超過 ${MAX_FILE_MB} MB 的檔案，開始上傳其餘 ${valid.length} 個`);
+        showToast(`已略過 ${skipped.length} 個超過 ${MAX_VIDEO_MB} MB 的影片，開始上傳其餘 ${valid.length} 個`);
       }
       executeUploadFlow(
         LOCKED_GROUP || directTargetAlbum.group,
@@ -1308,7 +1393,6 @@
       return;
     }
 
-    // 情境 B：在首頁選完照片 → 進入仿 LINE「建立相簿」全螢幕預覽頁
     if (pickerMode === "new_album") {
       clearComposerFiles();
       appendToComposer(valid, skipped);
@@ -1316,7 +1400,6 @@
       return;
     }
 
-    // 情境 C：在「建立相簿」預覽頁裡點「＋」補選更多照片
     if (pickerMode === "append_new_album") {
       appendToComposer(valid, skipped);
       renderComposerGrid();
@@ -1342,7 +1425,7 @@
     const warnEl = document.getElementById("composerWarn");
     if (skippedNames && skippedNames.length > 0) {
       warnEl.style.display = "block";
-      warnEl.textContent = `已自動略過 ${skippedNames.length} 個超過 ${MAX_FILE_MB} MB 的檔案（${skippedNames.slice(0, 2).join("、")}${skippedNames.length > 2 ? "…" : ""}）`;
+      warnEl.textContent = `已自動略過 ${skippedNames.length} 個超過 ${MAX_VIDEO_MB} MB 的影片（${skippedNames.slice(0, 2).join("、")}${skippedNames.length > 2 ? "…" : ""}）`;
     } else if (pickerMode === "new_album") {
       warnEl.style.display = "none";
     }
@@ -1469,6 +1552,68 @@
     });
   }
 
+  // ===== 比照 LINE 規格：前端壓縮照片（長邊 1600px、JPEG 0.82）=====
+  function compressForUpload(file) {
+    return new Promise(async (resolve, reject) => {
+      const extMatch = file.name.match(/\.[^.]+$/);
+      const origExt = extMatch ? extMatch[0] : (isVideoFile(file) ? ".mp4" : ".jpg");
+
+      // 影片或 GIF 動畫不經 canvas 壓縮
+      if (isVideoFile(file) || file.type === "image/gif") {
+        try {
+          const base64 = await readFileAsBase64(file);
+          resolve({ base64, mimeType: file.type || "application/octet-stream", ext: origExt });
+        } catch (e) { reject(e); }
+        return;
+      }
+
+      const objUrl = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        URL.revokeObjectURL(objUrl);
+        try {
+          let w = img.naturalWidth || img.width;
+          let h = img.naturalHeight || img.height;
+          if (w > IMAGE_MAX_EDGE || h > IMAGE_MAX_EDGE) {
+            if (w >= h) {
+              h = Math.round(h * (IMAGE_MAX_EDGE / w));
+              w = IMAGE_MAX_EDGE;
+            } else {
+              w = Math.round(w * (IMAGE_MAX_EDGE / h));
+              h = IMAGE_MAX_EDGE;
+            }
+          }
+          const canvas = document.createElement("canvas");
+          canvas.width = w;
+          canvas.height = h;
+          const ctx = canvas.getContext("2d");
+          ctx.fillStyle = "#FFFFFF";
+          ctx.fillRect(0, 0, w, h);
+          ctx.drawImage(img, 0, 0, w, h);
+
+          const dataUrl = canvas.toDataURL("image/jpeg", IMAGE_QUALITY);
+          const commaIdx = dataUrl.indexOf(",");
+          resolve({
+            base64: commaIdx >= 0 ? dataUrl.slice(commaIdx + 1) : dataUrl,
+            mimeType: "image/jpeg",
+            ext: ".jpg"
+          });
+        } catch (err) {
+          readFileAsBase64(file)
+            .then(base64 => resolve({ base64, mimeType: file.type || "image/jpeg", ext: origExt }))
+            .catch(reject);
+        }
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(objUrl);
+        readFileAsBase64(file)
+          .then(base64 => resolve({ base64, mimeType: file.type || "image/jpeg", ext: origExt }))
+          .catch(reject);
+      };
+      img.src = objUrl;
+    });
+  }
+
   function showUploadBanner(title, pct) {
     document.getElementById("uploadBanner").style.display = "block";
     document.getElementById("ubTitle").textContent = title;
@@ -1495,31 +1640,39 @@
       });
       if (!prep || !prep.ok) throw new Error((prep && prep.message) ? prep.message : "無法建立相簿資料夾");
 
-      const uploadedTokens = [];
       const total = files.length;
-      let seq = prep.startIndex || 1;
+      const uploadedTokens = new Array(total);
+      const baseSeq = prep.startIndex || 1;
+      let completed = 0;
+      let cursor = 0;
 
-      for (let i = 0; i < total; i++) {
-        const file = files[i];
-        const pct = Math.round((i / total) * 88) + 6;
-        showUploadBanner(`正在上傳至「${prep.albumName}」（${i + 1} / ${total}）`, pct);
+      async function worker() {
+        while (cursor < total) {
+          const i = cursor++;
+          const file = files[i];
+          const prepared = await compressForUpload(file);
+          const numberedName = `${prep.albumName}_${String(baseSeq + i).padStart(3, "0")}${prepared.ext}`;
 
-        const extMatch = file.name.match(/\.[^.]+$/);
-        const ext = extMatch ? extMatch[0] : (isVideoFile(file) ? ".mp4" : ".jpg");
-        const numberedName = `${prep.albumName}_${String(seq).padStart(3, "0")}${ext}`;
-        seq++;
+          const res = await apiPost({
+            action: "uploadFile",
+            folderId: prep.folderId,
+            fileName: numberedName,
+            mimeType: prepared.mimeType,
+            base64Data: prepared.base64
+          });
+          if (!res || !res.ok) throw new Error((res && res.message) ? res.message : `檔案 ${file.name} 上傳失敗`);
 
-        const base64 = await readFileAsBase64(file);
-        const res = await apiPost({
-          action: "uploadFile",
-          folderId: prep.folderId,
-          fileName: numberedName,
-          mimeType: file.type,
-          base64Data: base64
-        });
-        if (!res || !res.ok) throw new Error((res && res.message) ? res.message : `檔案 ${file.name} 上傳失敗`);
-        uploadedTokens.push(res.token);
+          uploadedTokens[i] = res.token;
+          completed++;
+          const pct = Math.round((completed / total) * 86) + 8;
+          showUploadBanner(`已壓縮上傳至「${prep.albumName}」（${completed} / ${total}）`, pct);
+        }
       }
+
+      const workers = [];
+      const workerCount = Math.min(UPLOAD_CONCURRENCY, total);
+      for (let w = 0; w < workerCount; w++) workers.push(worker());
+      await Promise.all(workers);
 
       showUploadBanner("正在更新相簿清單...", 96);
       const freshData = await apiPost({
@@ -1527,7 +1680,7 @@
         groupName: prep.groupName,
         albumName: prep.albumName,
         folderId: prep.folderId,
-        newTokens: uploadedTokens,
+        newTokens: uploadedTokens.filter(Boolean),
         lockedGroup: LOCKED_GROUP
       });
 
@@ -1541,7 +1694,7 @@
       }
 
       setTimeout(() => hideUploadBanner(), 700);
-      showToast(freshData.syncMessage || `已上傳 ${uploadedTokens.length} 個項目`);
+      showToast(freshData.syncMessage || `已上傳 ${total} 個項目`);
     } catch (err) {
       hideUploadBanner();
       showToast("上傳失敗：" + err.message);
@@ -1592,10 +1745,58 @@
     showToast("已清除此裝置的管理員記憶");
   }
 
-  // ===== 單一相簿內頁 =====
+  // ===== 單一相簿內頁與多選刪除模式 =====
+  function enterSelectMode() {
+    if (!currentItems || currentItems.length === 0) {
+      showToast("此相簿目前沒有可刪除的項目");
+      return;
+    }
+    selectMode = true;
+    selectedIds.clear();
+    document.getElementById("selectBar").style.display = "flex";
+    document.getElementById("detailFab").style.display = "none";
+    updateSelectBar();
+    renderPhotoGrid(currentItems);
+  }
+
+  function exitSelectMode() {
+    selectMode = false;
+    selectedIds.clear();
+    document.getElementById("selectBar").style.display = "none";
+    document.getElementById("detailFab").style.display = "flex";
+    if (currentAlbum) renderPhotoGrid(currentItems);
+  }
+
+  function toggleSelectItem(idx) {
+    const item = currentItems[idx];
+    if (!item) return;
+    if (selectedIds.has(item.id)) selectedIds.delete(item.id);
+    else selectedIds.add(item.id);
+    updateSelectBar();
+    renderPhotoGrid(currentItems);
+  }
+
+  function updateSelectBar() {
+    const n = selectedIds.size;
+    document.getElementById("selectBarCount").textContent = `已選取 ${n} 個項目`;
+    const btn = document.getElementById("selectDeleteBtn");
+    btn.disabled = (n === 0);
+    btn.textContent = n > 0 ? `刪除 (${n})` : "刪除項目";
+  }
+
+  function openBatchDeleteModal() {
+    if (selectedIds.size === 0 || !currentAlbum) return;
+    openDeleteModal("items", currentAlbum);
+  }
+
   async function openAlbum(origIdx) {
     const album = allAlbums[origIdx];
     if (!album) return;
+    selectMode = false;
+    selectedIds.clear();
+    document.getElementById("selectBar").style.display = "none";
+    document.getElementById("detailFab").style.display = "flex";
+
     currentAlbum = album;
 
     document.getElementById("detailTitle").textContent = album.name;
@@ -1641,15 +1842,22 @@
 
   function renderPhotoGrid(items) {
     const grid = document.getElementById("photoGrid");
-    grid.innerHTML = items.map((item, i) => `
-      <div class="photo-cell" onclick="openLightbox(${i})">
-        <img loading="lazy" src="${thumbUrl(item.id)}" data-id="${escapeHtml(item.id)}" onerror="handleThumbErr(this, 600)">
-        ${item.t === "v" ? '<div class="video-badge"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="6,4 20,12 6,20"/></svg></div><div class="video-tag-corner">影片</div>' : ''}
-      </div>
-    `).join("");
+    grid.innerHTML = items.map((item, i) => {
+      const isSel = selectMode && selectedIds.has(item.id);
+      const clickHandler = selectMode ? `toggleSelectItem(${i})` : `openLightbox(${i})`;
+      const checkHtml = selectMode ? `<div class="select-check">${isSel ? "✓" : ""}</div>` : "";
+      return `
+        <div class="photo-cell ${isSel ? "selected" : ""}" onclick="${clickHandler}">
+          <img loading="lazy" src="${thumbUrl(item.id)}" data-id="${escapeHtml(item.id)}" onerror="handleThumbErr(this, 600)">
+          ${checkHtml}
+          ${item.t === "v" ? '<div class="video-badge"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="6,4 20,12 6,20"/></svg></div><div class="video-tag-corner">影片</div>' : ''}
+        </div>
+      `;
+    }).join("");
   }
 
   function closeAlbum() {
+    exitSelectMode();
     currentAlbum = null;
     currentItems = [];
     document.getElementById("detailLoading").style.display = "none";
@@ -1773,6 +1981,9 @@
     if (type === "album") {
       titleEl.textContent = "刪除相簿";
       descEl.textContent = `確定要刪除「${target.name}」（${formatCountText(target)}）嗎？`;
+    } else if (type === "items") {
+      titleEl.textContent = `刪除 ${selectedIds.size} 個項目`;
+      descEl.textContent = `確定要從「${target.name}」中刪除已選取的 ${selectedIds.size} 個項目嗎？`;
     } else {
       const item = currentItems[currentIndex];
       const kind = (item && item.t === "v") ? "這部影片" : "這張照片";
@@ -1834,6 +2045,16 @@
           folderId: targetFolderId,
           lockedGroup: LOCKED_GROUP
         });
+      } else if (pendingDeleteType === "items") {
+        res = await apiPost({
+          action: "deleteItems",
+          passcode: passToSend,
+          groupName: targetGroup,
+          albumName: targetAlbumName,
+          folderId: targetFolderId,
+          fileIds: Array.from(selectedIds),
+          lockedGroup: LOCKED_GROUP
+        });
       } else {
         const item = currentItems[currentIndex];
         res = await apiPost({
@@ -1873,6 +2094,17 @@
         if (currentAlbum && currentAlbum.name === targetAlbumName && currentAlbum.group === targetGroup) {
           closeAlbum();
         }
+      } else if (pendingDeleteType === "items") {
+        const remaining = res.updatedItems || [];
+        const updatedIdx = allAlbums.findIndex(a => a.group === targetGroup && a.name === targetAlbumName);
+        exitSelectMode();
+        if (updatedIdx < 0 || remaining.length === 0) {
+          delete albumItemsCache[targetKey];
+          closeAlbum();
+        } else {
+          albumItemsCache[albumCacheKey(allAlbums[updatedIdx])] = remaining;
+          openAlbum(updatedIdx);
+        }
       } else {
         const remaining = res.updatedItems || [];
         const updatedIdx = allAlbums.findIndex(a => a.group === targetGroup && a.name === targetAlbumName);
@@ -1906,7 +2138,7 @@
     btn.classList.add("spinning");
     showToast("正在同步雲端最新相簿...");
     try {
-      const res = await apiPost({ action: "sync", lockedGroup: LOCKED_GROUP });
+      const res = await apiPost({ action: "sync", lockedGroup: LOCKED_GROUP, auto: false });
       if (res && res.ok) {
         albumItemsCache = {};
         applySummary(res);
