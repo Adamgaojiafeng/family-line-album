@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <title>所有相簿</title>
+
   <!-- PWA 全螢幕與主畫面圖示設定 -->
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
@@ -11,6 +12,7 @@
   <meta id="appleAppTitle" name="apple-mobile-web-app-title" content="家庭相簿">
   <meta name="theme-color" content="#FFFFFF">
   <link id="appleTouchIcon" rel="apple-touch-icon" sizes="180x180" href="">
+
   <style>
     :root {
       --line-green: #06C755;
@@ -872,6 +874,89 @@
     document.getElementById("ownerBadge").style.display = isDeviceAdmin() ? "inline-block" : "none";
   }
 
+  // ===== 自動產生 LINE 綠相簿 App 圖示與群組獨立 PWA 設定 =====
+  function setupPwaIconAndTitle() {
+    const appName = LOCKED_GROUP || "家庭相簿";
+    const titleMeta = document.getElementById("appleAppTitle");
+    if (titleMeta) titleMeta.setAttribute("content", appName);
+
+    const c = document.createElement("canvas");
+    c.width = 180;
+    c.height = 180;
+    const ctx = c.getContext("2d");
+
+    // 1. 滿版綠底（iOS 會自動裁成圓角）
+    ctx.fillStyle = "#06C755";
+    ctx.fillRect(0, 0, 180, 180);
+
+    function drawRoundRect(x, y, w, h, r) {
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.lineTo(x + w - r, y);
+      ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+      ctx.lineTo(x + w, y + h - r);
+      ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+      ctx.lineTo(x + r, y + h);
+      ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+      ctx.lineTo(x, y + r);
+      ctx.quadraticCurveTo(x, y, x + r, y);
+      ctx.closePath();
+    }
+
+    // 2. 後方疊層相簿邊條
+    ctx.fillStyle = "rgba(255,255,255,0.45)";
+    drawRoundRect(50, 34, 96, 86, 14);
+    ctx.fill();
+
+    // 3. 前方白色主相簿卡片
+    ctx.fillStyle = "#FFFFFF";
+    drawRoundRect(34, 48, 102, 92, 16);
+    ctx.fill();
+
+    // 4. 卡片內綠色山景與太陽剪影
+    ctx.fillStyle = "#06C755";
+    ctx.beginPath();
+    ctx.moveTo(48, 124);
+    ctx.lineTo(74, 88);
+    ctx.lineTo(94, 112);
+    ctx.lineTo(106, 98);
+    ctx.lineTo(124, 124);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.arc(108, 72, 9, 0, Math.PI * 2);
+    ctx.fill();
+
+    const pngUrl = c.toDataURL("image/png");
+
+    // 套用至 iOS 主畫面圖示與瀏覽器分頁圖示
+    const touchLink = document.getElementById("appleTouchIcon");
+    if (touchLink) touchLink.href = pngUrl;
+
+    const fav = document.createElement("link");
+    fav.rel = "icon";
+    fav.type = "image/png";
+    fav.href = pngUrl;
+    document.head.appendChild(fav);
+
+    // 動態產生 Android Chrome Manifest（鎖定保留當下 ?group= 網址）
+    const manifestObj = {
+      name: appName,
+      short_name: appName,
+      start_url: window.location.href,
+      display: "standalone",
+      background_color: "#FFFFFF",
+      theme_color: "#FFFFFF",
+      icons: [{ src: pngUrl, sizes: "180x180", type: "image/png" }]
+    };
+    const blob = new Blob([JSON.stringify(manifestObj)], { type: "application/manifest+json" });
+    const manifestLink = document.createElement("link");
+    manifestLink.rel = "manifest";
+    manifestLink.href = URL.createObjectURL(blob);
+    document.head.appendChild(manifestLink);
+  }
+
   function initApp() {
     if (LOCKED_GROUP) {
       document.title = `${LOCKED_GROUP} - 相簿`;
@@ -1209,7 +1294,7 @@
       return;
     }
 
-    // 情境 A：在相簿內（或卡片「上傳項目」）選完照片 → 立刻直接上傳！
+    // 情境 A：在相簿內（或卡片「上傳項目」）選完照片 → 立刻直接上傳
     if (pickerMode === "direct_upload" && directTargetAlbum) {
       if (skipped.length > 0) {
         showToast(`已略過 ${skipped.length} 個超過 ${MAX_FILE_MB} MB 的檔案，開始上傳其餘 ${valid.length} 個`);
@@ -1364,7 +1449,6 @@
     if (!targetGroup) { showToast("請輸入群組名稱"); return; }
 
     const filesToUpload = composerFiles.map(item => item.file);
-    // 關閉預覽畫面，改由底部浮動進度條顯示上傳進度
     clearComposerFiles();
     document.getElementById("createAlbumView").style.display = "none";
     document.body.style.overflow = "";
@@ -1838,6 +1922,7 @@
     }
   }
 
+  setupPwaIconAndTitle();
   initApp();
 </script>
 </body>
